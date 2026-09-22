@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quant-Grade Net Worth Tracker</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            quant: { 900: '#0B0F19', 800: '#151C2C', 700: '#232D42', green: '#10B981', red: '#EF4444', blue: '#3B82F6' }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- ON-SCREEN ERROR CATCHER -->
+  <script>
+    window.addEventListener('error', function(e) {
+      const loader = document.getElementById('loading');
+      if (loader) loader.style.display = 'none';
+      document.body.innerHTML += '<div style="color:#EF4444; background:#151C2C; padding:20px; margin:20px; border: 1px solid #EF4444; border-radius:8px; font-family:monospace;"><h3>System Error:</h3><p>' + e.message + '</p></div>';
+    });
+  </script>
+
+  <!-- Pinned, Ultra-Stable CDNs (Cloudflare) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.1.12/Recharts.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.3/babel.min.js"></script>
+
+  <style>
+    body { background-color: #0B0F19; color: #F8FAFC; font-family: system-ui, sans-serif; margin: 0; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0B0F19; }
+    ::-webkit-scrollbar-thumb { background: #232D42; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3B82F6; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div id="loading" style="display:flex; justify-content:center; align-items:center; height:100vh; color:#3B82F6; font-family:monospace; font-size: 1.2rem;">
+      Initializing Multi-Currency Quant Terminal...
+    </div>
+  </div>
+
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+    const { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend } = window.Recharts;
+
+    // --- Hardcoded SVG Icons ---
+    const ActivityIcon = () => <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-3 text-quant-blue"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>;
+    const PlusIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
+    const TrashIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>;
+
+    // --- Data ---
+    const initialAssets = [
+      { id: '1', name: 'Global Equities ETF', category: 'Equities', value: 450000 },
+      { id: '2', name: 'High Yield Savings', category: 'Cash', value: 85000 },
+      { id: '3', name: 'Primary Residence', category: 'Real Estate', value: 850000 },
+      { id: '4', name: 'Algorithmic Trading Acct', category: 'Alternatives', value: 125000 },
+    ];
+
+    const initialLiabilities = [
+      { id: '1', name: 'Mortgage', category: 'Real Estate', value: 520000 },
+      { id: '2', name: 'Margin Loan', category: 'Margin', value: 25000 },
+    ];
+
+    const historicalData = [
+      { month: 'Jan', netWorth: 850000 }, { month: 'Feb', netWorth: 875000 },
+      { month: 'Mar', netWorth: 860000 }, { month: 'Apr', netWorth: 890000 },
+      { month: 'May', netWorth: 920000 }, { month: 'Jun', netWorth: 915000 },
+      { month: 'Jul', netWorth: 950000 }, { month: 'Aug', netWorth: 980000 },
+      { month: 'Sep', netWorth: 975000 }, { month: 'Oct', netWorth: 1010000 },
+    ];
+
+    const cashFlowData = [
+      { month: 'Jul', income: 24000, expenses: 15500 }, { month: 'Aug', income: 22500, expenses: 13000 }, 
+      { month: 'Sep', income: 28000, expenses: 14500 }, { month: 'Oct', income: 23000, expenses: 16000 }, 
+    ];
+
+    const COLORS = ['#3B82F6', '#06B6D4', '#10B981', '#8B5CF6', '#F59E0B'];
+    const formatPercent = (val) => new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(val);
+
+    const App = () => {
+      const [currency, setCurrency] = useState('USD');
+      const [assets, setAssets] = useState(initialAssets);
+      const [liabilities, setLiabilities] = useState(initialLiabilities);
+      const [newItem, setNewItem] = useState({ type: 'asset', name: '', category: 'Equities', value: '' });
+
+      // Dynamic Currency Formatters
+      const formatCurrencyLocal = useMemo(() => {
+        return (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: currency, maximumFractionDigits: 0 }).format(val);
+      }, [currency]);
+
+      const currencySymbol = useMemo(() => {
+        const parts = new Intl.NumberFormat('en-US', { style: 'currency', currency: currency }).formatToParts(0);
+        const symbolPart = parts.find(part => part.type === 'currency');
+        return symbolPart ? symbolPart.value : '';
+      }, [currency]);
+
+      const totalAssets = useMemo(() => assets.reduce((sum, item) => sum + item.value, 0), [assets]);
+      const totalLiabilities = useMemo(() => liabilities.reduce((sum, item) => sum + item.value, 0), [liabilities]);
+      const currentNetWorth = totalAssets - totalLiabilities;
+      const leverageRatio = totalLiabilities / (totalAssets || 1);
+      
+      const chartHistoricalData = useMemo(() => [...historicalData, { month: 'Current', netWorth: currentNetWorth }], [currentNetWorth]);
+      const assetAllocation = useMemo(() => {
+        const alloc = assets.reduce((acc, asset) => { acc[asset.category] = (acc[asset.category] || 0) + asset.value; return acc; }, {});
+        return Object.entries(alloc).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
+      }, [assets]);
+
+      const handleAddItem = (e) => {
+        e.preventDefault();
+        if (!newItem.name || !newItem.category || !newItem.value) return;
+        const item = { id: Date.now().toString(), name: newItem.name, category: newItem.category, value: parseFloat(newItem.value) };
+        newItem.type === 'asset' ? setAssets([...assets, item]) : setLiabilities([...liabilities, item]);
+        setNewItem({ type: newItem.type, name: '', category: 'Equities', value: '' });
+      };
+
+      const handleDelete = (id, type) => type === 'asset' ? setAssets(assets.filter(a => a.id !== id)) : setLiabilities(liabilities.filter(l => l.id !== id));
+
+      const Metric = ({ title, value, subtext }) => (
+        <div className="bg-quant-800 border border-quant-700 rounded-xl p-5 flex flex-col">
+          <span className="text-slate-400 text-xs font-bold tracking-wider uppercase mb-1">{title}</span>
+          <span className="text-2xl lg:text-3xl font-mono font-bold text-white mb-1">{value}</span>
+          <span className="text-slate-500 text-sm">{subtext}</span>
+        </div>
+      );
+
+      const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+          return (
+            <div className="bg-quant-900 border border-quant-700 p-3 rounded shadow-xl z-50">
+              <p className="text-slate-300 font-medium mb-2">{label}</p>
+              {payload.map((entry, index) => (
+                <p key={index} className="font-mono text-sm" style={{ color: entry.color }}>{entry.name}: {formatCurrencyLocal(entry.value)}</p>
+              ))}
+            </div>
+          );
+        }
+        return null;
+      };
+
+      return (
+        <div className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+          <header className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-quant-700 pb-6">
+            <h1 className="text-3xl font-bold text-white tracking-tight flex items-center mb-4 md:mb-0">
+              <ActivityIcon />
+              Terminal <span className="text-slate-500 font-normal ml-2 hidden sm:inline">| Net Asset Value</span>
+            </h1>
+            
+            {/* CURRENCY SELECTOR */}
+            <div className="flex items-center space-x-3 bg-quant-800 border border-quant-700 p-2 rounded-lg">
+              <label className="text-slate-400 text-xs font-mono uppercase tracking-wider pl-2">Base Currency:</label>
+              <select 
+                value={currency} 
+                onChange={(e) => setCurrency(e.target.value)} 
+                className="bg-quant-900 border border-quant-700 text-white rounded p-1 text-sm outline-none font-mono focus:border-quant-blue transition-colors"
+              >
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
+                <option value="INR">INR (₹)</option>
+                <option value="JPY">JPY (¥)</option>
+                <option value="AUD">AUD ($)</option>
+                <option value="CAD">CAD ($)</option>
+                <option value="CHF">CHF</option>
+                <option value="CNY">CNY (¥)</option>
+              </select>
+            </div>
+          </header>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Metric title="Net Asset Value (NAV)" value={formatCurrencyLocal(currentNetWorth)} subtext="Total Equity" />
+            <Metric title="Gross Exposure (Assets)" value={formatCurrencyLocal(totalAssets)} subtext={`${assets.length} Positions`} />
+            <Metric title="Total Liabilities" value={formatCurrencyLocal(totalLiabilities)} subtext={`${liabilities.length} Debt Instruments`} />
+            <Metric title="Leverage Ratio" value={formatPercent(leverageRatio)} subtext="Debt / Assets" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-quant-800 border border-quant-700 rounded-xl p-5 h-[400px] flex flex-col">
+              <h2 className="text-lg font-semibold text-slate-200 mb-4">NAV Trajectory</h2>
+              <div className="flex-1 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartHistoricalData}>
+                    <defs>
+                      <linearGradient id="colorNav" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3B82F6" stopOpacity={0.4}/><stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/></linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#232D42" vertical={false} />
+                    <XAxis dataKey="month" stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `${currencySymbol}${val/1000}k`} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area type="monotone" dataKey="netWorth" name="Net Worth" stroke="#3B82F6" strokeWidth={3} fill="url(#colorNav)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-quant-800 border border-quant-700 rounded-xl p-5 h-[400px] flex flex-col">
+              <h2 className="text-lg font-semibold text-slate-200 mb-2">Asset Allocation</h2>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={assetAllocation} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
+                    {assetAllocation.map((e, i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-4 space-y-2 overflow-y-auto">
+                {assetAllocation.map((item, idx) => (
+                  <div key={item.name} className="flex justify-between items-center text-sm">
+                    <div className="flex items-center"><div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></div><span className="text-slate-300">{item.name}</span></div>
+                    <span className="font-mono text-slate-400">{formatPercent(item.value / totalAssets)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-quant-800 border border-quant-700 rounded-xl p-5 h-[350px] flex flex-col">
+              <h2 className="text-lg font-semibold text-slate-200 mb-6">Cash Flow Analysis</h2>
+              <div className="flex-1 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={cashFlowData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#232D42" vertical={false} />
+                    <XAxis dataKey="month" stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `${currencySymbol}${val/1000}k`} />
+                    <Tooltip content={<CustomTooltip />} cursor={{fill: '#151C2C'}} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                    <Bar dataKey="income" name="Inflows" fill="#10B981" radius={[4, 4, 0, 0]} barSize={20} />
+                    <Bar dataKey="expenses" name="Outflows" fill="#EF4444" radius={[4, 4, 0, 0]} barSize={20} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-quant-800 border border-quant-700 rounded-xl p-5 h-[350px] flex flex-col">
+              <h2 className="text-lg font-semibold text-slate-200 mb-6">Execute Transaction</h2>
+              <form onSubmit={handleAddItem} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col">
+                    <label className="text-xs text-slate-400 mb-1 font-bold uppercase">Type</label>
+                    <select value={newItem.type} onChange={e => setNewItem({...newItem, type: e.target.value})} className="bg-quant-900 border border-quant-700 text-white rounded p-2 text-sm outline-none">
+                      <option value="asset">Asset</option><option value="liability">Liability</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="text-xs text-slate-400 mb-1 font-bold uppercase">Class</label>
+                    <input type="text" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} className="bg-quant-900 border border-quant-700 text-white rounded p-2 text-sm outline-none" required />
+                  </div>
+                </div>
+                <div className="flex flex-col">
+                  <label className="text-xs text-slate-400 mb-1 font-bold uppercase">Description</label>
+                  <input type="text" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} className="bg-quant-900 border border-quant-700 text-white rounded p-2 text-sm outline-none" required />
+                </div>
+                <div className="flex flex-col">
+                  <label className="text-xs text-slate-400 mb-1 font-bold uppercase">Value ({currencySymbol})</label>
+                  <input type="number" value={newItem.value} onChange={e => setNewItem({...newItem, value: e.target.value})} className="bg-quant-900 border border-quant-700 text-white rounded p-2 font-mono text-sm outline-none" required min="0" step="0.01" />
+                </div>
+                <button type="submit" className="w-full mt-2 bg-quant-700 hover:bg-slate-600 text-white py-2 rounded font-medium text-sm flex justify-center items-center">
+                  <PlusIcon /> Append to Ledger
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
+            <div className="bg-quant-800 border border-quant-700 rounded-xl p-5">
+              <h2 className="text-lg font-semibold text-slate-200 mb-4 flex justify-between">
+                <span><span className="text-quant-green mr-2">■</span>Asset Book</span>
+                <span className="font-mono text-quant-green">{formatCurrencyLocal(totalAssets)}</span>
+              </h2>
+              <table className="w-full text-left text-sm">
+                <thead><tr className="text-xs text-slate-500 uppercase border-b border-quant-700"><th className="pb-2">Desc</th><th className="pb-2 text-right">Value</th><th className="pb-2 text-center">Del</th></tr></thead>
+                <tbody>
+                  {assets.map(a => (
+                    <tr key={a.id} className="border-b border-quant-700/50 hover:bg-quant-900 transition-colors">
+                      <td className="py-3 text-slate-300">{a.name} <span className="block text-xs text-slate-500">{a.category}</span></td>
+                      <td className="py-3 text-right font-mono text-slate-200">{formatCurrencyLocal(a.value)}</td>
+                      <td className="py-3 text-center"><button onClick={() => handleDelete(a.id, 'asset')} className="text-slate-500 hover:text-quant-red"><TrashIcon /></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="bg-quant-800 border border-quant-700 rounded-xl p-5">
+              <h2 className="text-lg font-semibold text-slate-200 mb-4 flex justify-between">
+                <span><span className="text-quant-red mr-2">■</span>Liability Book</span>
+                <span className="font-mono text-quant-red">{formatCurrencyLocal(totalLiabilities)}</span>
+              </h2>
+              <table className="w-full text-left text-sm">
+                <thead><tr className="text-xs text-slate-500 uppercase border-b border-quant-700"><th className="pb-2">Desc</th><th className="pb-2 text-right">Value</th><th className="pb-2 text-center">Del</th></tr></thead>
+                <tbody>
+                  {liabilities.map(l => (
+                    <tr key={l.id} className="border-b border-quant-700/50 hover:bg-quant-900 transition-colors">
+                      <td className="py-3 text-slate-300">{l.name} <span className="block text-xs text-slate-500">{l.category}</span></td>
+                      <td className="py-3 text-right font-mono text-slate-200">{formatCurrencyLocal(l.value)}</td>
+                      <td className="py-3 text-center"><button onClick={() => handleDelete(l.id, 'liability')} className="text-slate-500 hover:text-quant-red"><TrashIcon /></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+    document.getElementById('loading').style.display = 'none';
+  </script>
+</body>
+</html>
